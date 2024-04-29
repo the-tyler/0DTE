@@ -20,7 +20,6 @@ You can then  run
 doit
 
 ```
-```
 
 ## Generate signal of a skyrocketing 0DTE after 3PM  - upward trending market (October 30th 2023 - April 4th 2024)
 
