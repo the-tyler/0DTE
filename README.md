@@ -1,7 +1,8 @@
 # Quick Start
 
 The quickest way to run the code in this repo is to use the following steps. 
-Note: Currently, only pulls and saves data automatically
+
+**Note: Currently, only pulls and saves data automatically**
 
 
 1) Open config.py 
