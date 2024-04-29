@@ -3,23 +3,19 @@
 The quickest way to run the code in this repo is to use the following steps. 
 Note: Currently, only pulls and saves data automatically
 
-```
-Open config.py 
-Plug in the desired start and end date 
-Save config.py
+
+1) Open config.py 
+2) Plug in the desired start and end date 
+3) Save config.py
+4) Open terminal
+
 ```
 conda create -n finm python=3.12
 conda activate finm
-```
-and then install the dependencies with pip
-```
 pip install -r requirements.txt
-```
-You can then  run 
-```
 doit
-
 ```
+
 
 ## Generate signal of a skyrocketing 0DTE after 3PM  - upward trending market (October 30th 2023 - April 4th 2024)
 
