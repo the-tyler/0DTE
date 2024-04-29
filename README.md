@@ -7,12 +7,18 @@ Note: Currently, only pulls and saves data automatically
 1) Open config.py 
 2) Plug in the desired start and end date 
 3) Save config.py
-4) Open terminal
+4) Open terminal and run
 
 ```
 conda create -n finm python=3.12
+```
+```
 conda activate finm
+```
+```
 pip install -r requirements.txt
+```
+```
 doit
 ```
 
@@ -37,6 +43,3 @@ doit
 - The independent variables will be some of the analyzed variables above
 - The dependent variable will be 0 if the 0DTEs expire worthless and 1 if their value rises (we need a systematic approach for mapping such as if the price of 0DTE rose minimum 30% after 2.30pm relative to its daily open)
 - The model output will be 1 if the probability is greater than 50% and 0 otherwise. However, if the probability is much higher than 50% the position size can be increased and vice versa
-
-# Project-Repo
-# Project-Repo
