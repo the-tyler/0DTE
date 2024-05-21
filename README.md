@@ -22,4 +22,3 @@ pip install -r requirements.txt
 ```
 doit
 ```
-5) Go to Analysis_and_Modeling.py and run the notebook to see the step-by-step approach
