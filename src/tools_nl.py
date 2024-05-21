@@ -1,5 +1,5 @@
 """
-Tools from Nick
+Toolbox
 
 """
 
@@ -25,18 +25,28 @@ from pandas.tseries.offsets import BDay
 # system
 import os
 from datetime import datetime
+from datetime import timedelta
 import json
 
 # ML
 #import tensorflow as tf
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import Ridge
+
+from statsmodels.stats.diagnostic import het_breuschpagan
+from statsmodels.stats.stattools import durbin_watson
 
 #from keras.models import Sequential
 #from keras.layers import Dense, Dropout
 #from keras.callbacks import EarlyStopping
 
 import statsmodels.api as sm
+import statsmodels.formula.api as smf
+
+from linearmodels import RandomEffects
+from linearmodels import PanelOLS
 
 # plotting
 import matplotlib.pyplot as plt
@@ -123,33 +133,35 @@ def fix_concatenated_lines(file_path, fixed_file_path):
 
 # ==============================================
 
-def plot_volatility_surface(df):
-    df['midIv'] = (df['callMidIv'] + df['putMidIv']) / 2
+def plot_volatility_surface(df, strike_, dte_, midIv_, minutes = True):
 
-    fig = plt.figure(figsize=(10, 7))
+    fig = plt.figure(figsize=(12, 9))
     ax = fig.add_subplot(111, projection='3d')
 
-    x = df['strike']
-    y = df['dte']
-    z = df['midIv']
+    x = df[strike_]
+    y = df[dte_]
+    z = df[midIv_]
 
     ax.scatter(x, y, z, c='r', marker='o')
 
     ax.set_xlabel('Strike Price')
-    ax.set_ylabel('Days to Expiration (DTE)')
+    if minutes:
+        ax.set_ylabel('Minutes to Expiration')
+    else:
+        ax.set_ylabel('Days to Expiration (DTE)')
     ax.set_zlabel('Mid Implied Volatility')
 
     plt.title('Volatility Surface')
     plt.show()
 
 
-def plot_interpolated_volatility_surface(filtered_df):
+def plot_interpolated_volatility_surface(filtered_df, strike_, dte_, midIv_, minutes = True,  save_path_ = None, file_name_=None):
     if not filtered_df.empty:
-        points = filtered_df[['strike', 'dte']].values
-        values = filtered_df['midIv'].values
+        points = filtered_df[[strike_, dte_]].values
+        values = filtered_df[midIv_].values
 
-        grid_x, grid_y = np.mgrid[min(filtered_df['strike']):max(filtered_df['strike']):100j, 
-                                  min(filtered_df['dte']):max(filtered_df['dte']):100j]
+        grid_x, grid_y = np.mgrid[min(filtered_df[strike_]):max(filtered_df[strike_]):100j, 
+                                  min(filtered_df[dte_]):max(filtered_df[dte_]):100j]
 
         grid_z = griddata(points, values, (grid_x, grid_y), method='cubic')
 
@@ -158,26 +170,37 @@ def plot_interpolated_volatility_surface(filtered_df):
         surf = ax.plot_surface(grid_x, grid_y, grid_z, cmap='viridis', edgecolor='none')
 
         ax.set_xlabel('Strike Price')
-        ax.set_ylabel('Days to Expiration (DTE)')
+        if minutes:
+            ax.set_ylabel('Minutes to Expiration')
+        else:
+            ax.set_ylabel('Days to Expiration (DTE)')
         ax.set_zlabel('Mid Implied Volatility')
 
         fig.colorbar(surf, shrink=0.5, aspect=5)
-        plt.title('Interpolated Volatility Surface')
+        plt.title('Volatility Surface')
+
+        if save_path_ and file_name_:
+            file_path = os.path.join(save_path_, file_name_)
+            plt.savefig(file_path)
+            print(f"Figure saved as {file_path}")
+        elif save_path_:
+            print("No save path is provided. Plots are not saved")
+
         plt.show()
     else:
         print("The filtered DataFrame is empty. Unable to plot the volatility surface.")
 
 
-def plot_interactive_volatility_surface(filtered_df):
+def plot_interactive_volatility_surface(filtered_df, strike_, dte_, midIv_):
     grouped = filtered_df.groupby('quoteDate')
 
     fig = go.Figure()
 
     for date, group in grouped:
-        points = group[['strike', 'dte']].values
-        values = group['midIv'].values
-        grid_x, grid_y = np.mgrid[min(group['strike']):max(group['strike']):100j, 
-                                  min(group['dte']):max(group['dte']):100j]
+        points = group[[strike_, dte_]].values
+        values = group[midIv_].values
+        grid_x, grid_y = np.mgrid[min(group[strike_]):max(group[strike_]):100j, 
+                                  min(group[dte_]):max(group[dte_]):100j]
 
         grid_z = griddata(points, values, (grid_x, grid_y), method='cubic')
 
@@ -211,7 +234,7 @@ def plot_interactive_volatility_surface(filtered_df):
         title='Volatility Surface',
         scene=dict(
             xaxis_title='Strike Price',
-            yaxis_title='Days to Expiration (DTE)',
+            yaxis_title='Minute to Expiration',
             zaxis_title='Mid Implied Volatility'
         )
     )
@@ -783,3 +806,46 @@ def plot_stock_price_over_time(df):
                       yaxis_title='Stock Price',
                       xaxis=dict(type='category'))  # Treat timestamps as discrete categories
     fig.show()
+
+
+# ==============================================
+
+
+def corr_matrix(df):
+    corrM = round(df.corr(), 3)
+    return corrM
+    
+def visualize_corr_matrix(df, dim_x, dim_y):  
+    fig, ax = plt.subplots(figsize=(dim_x, dim_y))
+    
+    # Calculate the correlation matrix
+    my_corr_matrix = corr_matrix(df)
+
+    # Mask the lower triangle
+    #mask = np.triu(np.ones_like(my_corr_matrix, dtype=bool))
+
+    # Display the correlation matrix as a heatmap with annotations
+    cax = ax.matshow(my_corr_matrix, cmap='coolwarm') #mask=mask)
+    
+    # Add annotations to show correlation values
+    for i in range(len(my_corr_matrix)):
+        for j in range(len(my_corr_matrix)):
+            ax.text(i, j, f'{my_corr_matrix.iloc[i, j]:.2f}', va='center', ha='center')
+    
+    # Set the x and y axis labels based on column names
+    ax.set_xticks(range(len(my_corr_matrix.columns)))
+    ax.set_yticks(range(len(my_corr_matrix.columns)))
+    ax.set_xticklabels(my_corr_matrix.columns)
+    ax.set_yticklabels(my_corr_matrix.columns)
+    
+    # Tilt the labels slightly for readability
+    ax.set_xticklabels(my_corr_matrix.columns, rotation=35)
+    ax.set_yticklabels(my_corr_matrix.columns, rotation=35)
+    # Set a title for the plot
+    ax.set_title("Correlation Heatmap")
+    
+    # Show the colorbar for the heatmap
+    plt.colorbar(cax)
+    
+    # Show the plot
+    plt.show()

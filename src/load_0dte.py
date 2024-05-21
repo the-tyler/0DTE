@@ -10,7 +10,7 @@ csv_file = config.CSV_FILE
 def load_clean(data_dir_ = data_dir, csv_file_ = csv_file, dte_ = 1):
 
     """
-    Loads 0 dte options by default.
+    Loads 0dte options by default (dte_ = 1)
     """
     
     ## Read and Prepare the Data

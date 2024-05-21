@@ -23,22 +23,25 @@ OUTPUT_DIR = config('OUTPUT_DIR', default=BASE_DIR / 'output/', cast=Path)
 
 # DATA PULL PARAMS
 URL = "https://api.orats.io/datav2/hist/one-minute/strikes/chain"
-TOKEN = "3c5674a1-9f50-4352-9e8f-5a66d41ed2fe" 
+TOKEN = "REPLACE WITH YOUR TOKEN"
 TICKER = "SPX"
 
 # Set time: (YYYY, M, D, H, M[M]) in 24h format. Set in EST - Do not touch the minute and hour unless necessary
-START_TIME = datetime.datetime(2024, 3, 13, 9, 31)
-END_TIME = datetime.datetime(2024, 3, 13, 16, 0)
+START_TIME = datetime.datetime(2024, 4, 30, 9, 31)
+END_TIME = datetime.datetime(2024, 4, 30, 16, 0)
 
 # Name the csv file as "month_day_data.csv"
-CSV_FILE = f"{START_TIME.month}_{END_TIME.day}_data.csv"
+CSV_FILE = f"{START_TIME.month}_{START_TIME.day}_{START_TIME.year}_data.csv"
+CSV_FILE_0DTE = f"{START_TIME.month}_{START_TIME.day}_{START_TIME.year}_0DTE.csv"
 
 if __name__ == "__main__":
     
     ## If they don't exist, create the data and output directories
     (DATA_DIR / 'pulled').mkdir(parents=True, exist_ok=True)
+    (DATA_DIR / 'derived').mkdir(parents=True, exist_ok=True)
 
     # Sometimes, I'll create other folders to organize the data
     (DATA_DIR / 'manual').mkdir(parents=True, exist_ok=True)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DIR / 'plots').mkdir(parents=True, exist_ok=True)
