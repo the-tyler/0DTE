@@ -10,7 +10,7 @@ pillars, and produces a two-panel smile plot plus a pillar-history chart.
 
 import json
 import warnings
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -42,9 +42,6 @@ for _d in (SNAP_DIR, PLOT_DIR):
 TICKER = "SPY"
 TODAY  = date.today()
 
-EXPIRY_MIN_DAYS  = 1    # skip 0DTE (degenerate T=0)
-EXPIRY_MAX_DAYS  = 5    # take the nearest expiry within this window
-
 MIN_OI           = 10   # minimum open interest per strike
 MIN_BID          = 0.01
 MAX_SPREAD_RATIO = 0.75  # (ask-bid)/mid — drop illiquid strikes
@@ -63,7 +60,7 @@ PILLAR_LABELS = ["10Δ-Call", "25Δ-Call", "ATM", "25Δ-Put", "10Δ-Put"]
 PILLAR_COLORS = ["#1565C0", "#42A5F5", "#616161", "#EF5350", "#B71C1C"]
 
 FALLBACK_R = 0.0525   # 5.25% — last-resort if FRED + cache fail
-FALLBACK_Q = 0.013    # 1.30% — last-resort if yfinance + cache fail
+FALLBACK_Q = 0.008    # 0.80% — last-resort if yfinance + cache fail
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -195,12 +192,27 @@ def fetch_dividend_yield() -> float:
 #  OPTION CHAIN — fetch, clean, build smile
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _next_trading_day() -> date:
+    """
+    Return the next exchange business day after TODAY.
+    pd.bdate_range handles Mon–Fri; if that day is a market holiday,
+    spy.options won't list it and find_1dte_expiry returns None — the
+    option chain is the authoritative source of truth on closure.
+    """
+    return pd.bdate_range(start=TODAY + timedelta(days=1), periods=1)[0].date()
+
+
 def find_1dte_expiry(spy: yf.Ticker) -> Optional[Tuple[str, int]]:
-    """Return (expiry_str, calendar_days) for the nearest qualifying expiry."""
-    for exp in spy.options:
-        days = (datetime.strptime(exp, "%Y-%m-%d").date() - TODAY).days
-        if EXPIRY_MIN_DAYS <= days <= EXPIRY_MAX_DAYS:
-            return exp, days
+    """
+    Target exactly the next trading day — nothing further.
+    On Mon–Thu that is tomorrow (1 cal-day); on Fri it is Monday (3 cal-days).
+    Returns (expiry_str, calendar_days) or None if that expiry is not listed
+    (market holiday, chain not yet published, etc.).
+    """
+    target     = _next_trading_day()
+    target_str = target.strftime("%Y-%m-%d")
+    if target_str in spy.options:
+        return target_str, (target - TODAY).days
     return None
 
 
@@ -278,9 +290,12 @@ def build_smile_df(chain_calls: pd.DataFrame, chain_puts: pd.DataFrame,
 
 def interpolate_pillars(df: pd.DataFrame) -> list[float]:
     """
-    Linear interpolation of IV at each target call-delta in PILLARS.
-    Operates on the (call_delta, iv) series of any snapshot DataFrame.
-    Returns NaN for out-of-range pillars.
+    Cubic-spline interpolation of IV at each target call-delta in PILLARS.
+    Cubic spline respects the convex, curved shape of the vol smile and avoids
+    the kinks that linear interpolation introduces between observed strikes.
+    Falls back to linear when fewer than 4 points are available (cubic requires
+    at least 4 to be well-conditioned).
+    Returns NaN for pillars outside the observed delta range.
     """
     pts = (df[["call_delta", "iv"]]
            .dropna()
@@ -291,9 +306,10 @@ def interpolate_pillars(df: pd.DataFrame) -> list[float]:
     if len(pts) < 2:
         return [np.nan] * len(PILLARS)
 
+    kind = "cubic" if len(pts) >= 4 else "linear"
     try:
         fn = interp1d(pts["call_delta"], pts["iv"],
-                      kind="linear", bounds_error=False, fill_value=np.nan)
+                      kind=kind, bounds_error=False, fill_value=np.nan)
         return [float(fn(d)) for d in PILLARS]
     except Exception:
         return [np.nan] * len(PILLARS)
@@ -472,13 +488,16 @@ def run_pipeline() -> None:
     # 3 ── Nearest 1DTE expiry ─────────────────────────────────────────────────
     result = find_1dte_expiry(spy)
     if result is None:
-        print(f"\n  No expiry found within {EXPIRY_MIN_DAYS}–{EXPIRY_MAX_DAYS} cal-days.")
+        nxt = _next_trading_day()
+        print(f"\n  No expiry found for next trading day ({nxt}).")
+        print(f"  Market may be closed (holiday) or chain not yet published.")
         print(f"  Available expirations: {spy.options[:8]}")
         return
     expiry, days = result
+    bday_label = "1 business day" if days == 1 else f"1 business day ({days} cal-days)"
     T = days / 365.0
     F = S * np.exp((r - q) * T)
-    print(f"\n  Expiry : {expiry}  ({days} cal-day(s),  T = {T:.6f} yr)")
+    print(f"\n  Expiry : {expiry}  ({bday_label},  T = {T:.6f} yr)")
     print(f"  Forward: ${F:.2f}\n")
 
     # 4 ── Build smile DataFrame ───────────────────────────────────────────────
