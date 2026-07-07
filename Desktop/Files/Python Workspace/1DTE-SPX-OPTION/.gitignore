@@ -1,0 +1,11 @@
+# Pipeline runtime logs — not useful to track in git
+data/pipeline.log
+data/pipeline.log.old
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
