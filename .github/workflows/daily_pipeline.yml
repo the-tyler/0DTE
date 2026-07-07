@@ -80,7 +80,59 @@ jobs:
             || git commit -m "chore: pipeline run $(date -u '+%Y-%m-%d')"
           git push
 
-      # ── 7. Email notification ─────────────────────────────────────────────────
+      # ── 7. Build email body ───────────────────────────────────────────────────
+      - name: Build email body
+        if: steps.timing.outputs.should_run == 'true'
+        run: |
+          python3 - <<'EOF'
+          import re
+
+          RUN_DATE  = "${{ steps.timing.outputs.run_date }}"
+          BASE_URL  = (
+              "https://github.com/the-tyler/0DTE/blob/main/"
+              "Desktop/Files/Python%20Workspace/1DTE-SPX-OPTION/data"
+          )
+
+          lines = open("/tmp/pipeline_output.txt").readlines()
+
+          # Drop lines the user doesn't want in the email
+          SKIP = ["Risk-free rate", "Dividend yield", "Forward:"]
+          filtered = []
+          for line in lines:
+              if any(p in line for p in SKIP):
+                  continue
+              # Strip "  T = 0.002740 yr" from the expiry line
+              line = re.sub(r",\s*T\s*=\s*[\d.]+\s*yr", "", line)
+              filtered.append(line)
+
+          body_text = "".join(filtered).strip()
+
+          html = f"""<!DOCTYPE html>
+          <html><body style="font-family:sans-serif;color:#222">
+          <pre style="font-family:monospace;font-size:13px;line-height:1.6;
+                      background:#f6f8fa;padding:16px;border-radius:6px">{body_text}</pre>
+          <hr style="border:none;border-top:1px solid #ddd;margin:20px 0">
+          <table style="border-collapse:collapse;font-size:14px">
+            <tr>
+              <td style="padding:6px 16px 6px 0"><b>Smile Plot</b></td>
+              <td><a href="{BASE_URL}/plots/smile_{RUN_DATE}.png">View on GitHub</a></td>
+            </tr>
+            <tr>
+              <td style="padding:6px 16px 6px 0"><b>Pillar History</b></td>
+              <td><a href="{BASE_URL}/plots/pillar_history_{RUN_DATE}.png">View on GitHub</a></td>
+            </tr>
+            <tr>
+              <td style="padding:6px 16px 6px 0"><b>Snapshot Data</b></td>
+              <td><a href="{BASE_URL}/snapshots/{RUN_DATE}.parquet">Download .parquet</a></td>
+            </tr>
+          </table>
+          </body></html>"""
+
+          open("/tmp/email_body.html", "w").write(html)
+          print("Email body written.")
+          EOF
+
+      # ── 8. Send email ─────────────────────────────────────────────────────────
       - name: Send completion email
         if: steps.timing.outputs.should_run == 'true'
         uses: dawidd6/action-send-mail@v3
@@ -93,5 +145,4 @@ jobs:
           to:             ${{ secrets.GMAIL_USERNAME }}, ${{ secrets.EXTRA_RECIPIENTS }}
           from:           SPY 1DTE Pipeline <${{ secrets.GMAIL_USERNAME }}>
           subject:        "SPY 1DTE Pipeline ✓  ${{ steps.timing.outputs.run_date }}"
-          body:           file:///tmp/pipeline_output.txt
-          convert_markdown: false
+          html_body:      file:///tmp/email_body.html
