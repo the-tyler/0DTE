@@ -39,6 +39,7 @@ jobs:
           should_run = is_4pm or is_manual
           with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
               fh.write(f"should_run={'true' if should_run else 'false'}\n")
+              fh.write(f"run_date={now_et.strftime('%Y-%m-%d')}\n")
           print(f"Event={event}  ET={now_et.strftime('%H:%M')}  should_run={should_run}")
           EOF
 
@@ -61,7 +62,7 @@ jobs:
       - name: Run SPY 1DTE pipeline
         if: steps.timing.outputs.should_run == 'true'
         working-directory: "Desktop/Files/Python Workspace/1DTE-SPX-OPTION"
-        run: python3 spy_1dte_vol_pipeline.py
+        run: python3 spy_1dte_vol_pipeline.py | tee /tmp/pipeline_output.txt
 
       # ── 6. Commit results ─────────────────────────────────────────────────────
       # Snapshots, plots, and rates cache are committed back so history
@@ -78,3 +79,19 @@ jobs:
             && echo "Nothing new to commit." \
             || git commit -m "chore: pipeline run $(date -u '+%Y-%m-%d')"
           git push
+
+      # ── 7. Email notification ─────────────────────────────────────────────────
+      - name: Send completion email
+        if: steps.timing.outputs.should_run == 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port:    465
+          secure:         true
+          username:       ${{ secrets.GMAIL_USERNAME }}
+          password:       ${{ secrets.GMAIL_APP_PASSWORD }}
+          to:             ${{ secrets.GMAIL_USERNAME }}
+          from:           SPY 1DTE Pipeline <${{ secrets.GMAIL_USERNAME }}>
+          subject:        "SPY 1DTE Pipeline ✓  ${{ steps.timing.outputs.run_date }}"
+          body:           file:///tmp/pipeline_output.txt
+          convert_markdown: false
