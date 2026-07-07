@@ -8,6 +8,7 @@ Saves a daily parquet snapshot, interpolates 10/25/ATM/25/10-delta
 pillars, and produces a two-panel smile plot plus a pillar-history chart.
 """
 
+import argparse
 import json
 import warnings
 from datetime import date, datetime, timedelta
@@ -320,11 +321,14 @@ def interpolate_pillars(df: pd.DataFrame) -> list[float]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def plot_smile(df: pd.DataFrame, pillars: list[float],
-               S: float, F: float, expiry: str, days: int) -> None:
+               S: float, F: float, expiry: str, days: int,
+               run_date: date = None) -> None:
     """Two-panel smile: log-moneyness (left) and call-delta with pillars (right)."""
+    if run_date is None:
+        run_date = TODAY
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
     fig.suptitle(
-        f"SPY 1DTE Vol Smile  —  {TODAY}   "
+        f"SPY 1DTE Vol Smile  —  {run_date}   "
         f"(exp {expiry}, {days}d  |  S={S:.2f}  F={F:.2f})",
         fontsize=11, fontweight="bold",
     )
@@ -376,17 +380,19 @@ def plot_smile(df: pd.DataFrame, pillars: list[float],
     ax2.grid(True, alpha=0.2)
 
     plt.tight_layout()
-    path = PLOT_DIR / f"smile_{TODAY}.png"
+    path = PLOT_DIR / f"smile_{run_date}.png"
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  Smile plot    → {path.relative_to(ROOT)}")
 
 
-def plot_pillar_history() -> None:
+def plot_pillar_history(run_date: date = None) -> None:
     """
     Load every snapshot in SNAP_DIR, recompute pillars, and plot the
     IV time series for each delta pillar.
     """
+    if run_date is None:
+        run_date = TODAY
     files = sorted(SNAP_DIR.glob("*.parquet"))
     if not files:
         return
@@ -424,7 +430,7 @@ def plot_pillar_history() -> None:
     ax.grid(True, alpha=0.2)
 
     plt.tight_layout()
-    path = PLOT_DIR / f"pillar_history_{TODAY}.png"
+    path = PLOT_DIR / f"pillar_history_{run_date}.png"
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  History plot  → {path.relative_to(ROOT)}")
@@ -434,7 +440,81 @@ def plot_pillar_history() -> None:
 #  ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _parse_args() -> date:
+    """Return the date to run for (today if --date is omitted)."""
+    p = argparse.ArgumentParser(description="SPY 1DTE IV Pipeline")
+    p.add_argument(
+        "--date",
+        metavar="YYYY-MM-DD",
+        default=None,
+        help="Replay a past snapshot instead of fetching live data.",
+    )
+    args = p.parse_args()
+    if args.date is None:
+        return date.today()
+    try:
+        return datetime.strptime(args.date, "%Y-%m-%d").date()
+    except ValueError:
+        print(f"  ERROR: Invalid date '{args.date}'. Use YYYY-MM-DD.")
+        raise SystemExit(1)
+
+
+def _print_pillars(pillars: list[float]) -> None:
+    print("  ┌──────────────────────────────────────────┐")
+    print("  │  Pillar          Call Δ       IV          │")
+    print("  ├──────────────────────────────────────────┤")
+    for lbl, d_tgt, iv_val in zip(PILLAR_LABELS, PILLARS, pillars):
+        iv_str = f"{iv_val:.3%}" if not np.isnan(iv_val) else "   N/A   "
+        print(f"  │  {lbl:<14s}  {d_tgt:.2f}      {iv_str:>9s}   │")
+    print("  └──────────────────────────────────────────┘")
+
+
+def _run_historical(run_date: date) -> None:
+    """Reload a past snapshot, reprint pillars, regenerate plots."""
+    sep = "═" * 62
+    print(f"\n{sep}")
+    print(f"  SPY 1DTE IV Pipeline  —  {run_date}  [HISTORICAL REPLAY]")
+    print(f"{sep}\n")
+
+    snap_path = SNAP_DIR / f"{run_date}.parquet"
+    if not snap_path.exists():
+        available = sorted(p.stem for p in SNAP_DIR.glob("*.parquet"))
+        print(f"  No snapshot found for {run_date}.")
+        print(f"  yfinance only serves live option chains — historical data")
+        print(f"  requires a paid source (CBOE DataShop, Polygon.io, etc.).")
+        if available:
+            print(f"  Snapshots on disk: {', '.join(available)}")
+        else:
+            print(f"  No snapshots on disk yet.")
+        return
+
+    df     = pd.read_parquet(snap_path)
+    S      = float(df["spot"].iloc[0])
+    F      = float(df["forward"].iloc[0])
+    expiry = str(df["expiry"].iloc[0])
+    T      = float(df["T"].iloc[0])
+    days   = round(T * 365)
+
+    print(f"  Loaded  → {snap_path.relative_to(ROOT)}")
+    print(f"  SPY spot: ${S:.2f}   Forward: ${F:.2f}")
+    print(f"  Expiry : {expiry}  ({days} cal-day(s),  T = {T:.6f} yr)\n")
+
+    pillars = interpolate_pillars(df)
+    _print_pillars(pillars)
+
+    print()
+    plot_smile(df, pillars, S, F, expiry, days, run_date=run_date)
+    plot_pillar_history(run_date=run_date)
+
+    print(f"\n  All done.  Outputs in: {DATA_DIR.relative_to(ROOT)}/\n")
+
+
 def run_pipeline() -> None:
+    run_date = _parse_args()
+    if run_date < TODAY:
+        _run_historical(run_date)
+        return
+
     sep = "═" * 62
     print(f"\n{sep}")
     print(f"  SPY 1DTE IV Pipeline  —  {TODAY}")
@@ -520,18 +600,12 @@ def run_pipeline() -> None:
     # 6 ── Delta pillars ───────────────────────────────────────────────────────
     pillars = interpolate_pillars(df)
     print()
-    print("  ┌──────────────────────────────────────────┐")
-    print("  │  Pillar          Call Δ       IV          │")
-    print("  ├──────────────────────────────────────────┤")
-    for lbl, d_tgt, iv_val in zip(PILLAR_LABELS, PILLARS, pillars):
-        iv_str = f"{iv_val:.3%}" if not np.isnan(iv_val) else "   N/A   "
-        print(f"  │  {lbl:<14s}  {d_tgt:.2f}      {iv_str:>9s}   │")
-    print("  └──────────────────────────────────────────┘")
+    _print_pillars(pillars)
 
     # 7 ── Plots ───────────────────────────────────────────────────────────────
     print()
-    plot_smile(df, pillars, S, F, expiry, days)
-    plot_pillar_history()
+    plot_smile(df, pillars, S, F, expiry, days, run_date=TODAY)
+    plot_pillar_history(run_date=TODAY)
 
     print(f"\n  All done.  Outputs in: {DATA_DIR.relative_to(ROOT)}/\n")
 
