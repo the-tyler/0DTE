@@ -90,7 +90,7 @@ jobs:
           secure:         true
           username:       ${{ secrets.GMAIL_USERNAME }}
           password:       ${{ secrets.GMAIL_APP_PASSWORD }}
-          to:             ${{ secrets.GMAIL_USERNAME }}
+          to:             ${{ secrets.GMAIL_USERNAME }}, ${{ secrets.EXTRA_RECIPIENTS }}
           from:           SPY 1DTE Pipeline <${{ secrets.GMAIL_USERNAME }}>
           subject:        "SPY 1DTE Pipeline ✓  ${{ steps.timing.outputs.run_date }}"
           body:           file:///tmp/pipeline_output.txt
