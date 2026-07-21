@@ -77,6 +77,12 @@ jobs:
           import re
 
           RUN_DATE  = "${{ steps.timing.outputs.run_date }}"
+          # Expiry date written by the pipeline; used for file link names.
+          try:
+              FILE_DATE = open("/tmp/expiry_date.txt").read().strip()
+          except FileNotFoundError:
+              FILE_DATE = RUN_DATE
+
           BASE_URL  = (
               "https://github.com/the-tyler/0DTE/blob/main/"
               "Desktop/Files/Python%20Workspace/1DTE-SPX-OPTION/data"
@@ -104,15 +110,15 @@ jobs:
           <table style="border-collapse:collapse;font-size:14px">
             <tr>
               <td style="padding:6px 16px 6px 0"><b>Smile Plot</b></td>
-              <td><a href="{BASE_URL}/plots/smile_{RUN_DATE}.png">View on GitHub</a></td>
+              <td><a href="{BASE_URL}/plots/smile_{FILE_DATE}.png">View on GitHub</a></td>
             </tr>
             <tr>
               <td style="padding:6px 16px 6px 0"><b>Pillar History</b></td>
-              <td><a href="{BASE_URL}/plots/pillar_history_{RUN_DATE}.png">View on GitHub</a></td>
+              <td><a href="{BASE_URL}/plots/pillar_history_{FILE_DATE}.png">View on GitHub</a></td>
             </tr>
             <tr>
               <td style="padding:6px 16px 6px 0"><b>Snapshot Data</b></td>
-              <td><a href="{BASE_URL}/snapshots/{RUN_DATE}.parquet">Download .parquet</a></td>
+              <td><a href="{BASE_URL}/snapshots/{FILE_DATE}.parquet">Download .parquet</a></td>
             </tr>
           </table>
           </body></html>"""

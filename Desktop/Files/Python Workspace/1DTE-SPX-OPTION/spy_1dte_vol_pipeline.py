@@ -322,10 +322,12 @@ def interpolate_pillars(df: pd.DataFrame) -> list[float]:
 
 def plot_smile(df: pd.DataFrame, pillars: list[float],
                S: float, F: float, expiry: str, days: int,
-               run_date: date = None) -> None:
+               run_date: date = None, file_date=None) -> None:
     """Two-panel smile: log-moneyness (left) and call-delta with pillars (right)."""
     if run_date is None:
         run_date = TODAY
+    if file_date is None:
+        file_date = run_date
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
     fig.suptitle(
         f"SPY 1DTE Vol Smile  —  {run_date}   "
@@ -380,19 +382,21 @@ def plot_smile(df: pd.DataFrame, pillars: list[float],
     ax2.grid(True, alpha=0.2)
 
     plt.tight_layout()
-    path = PLOT_DIR / f"smile_{run_date}.png"
+    path = PLOT_DIR / f"smile_{file_date}.png"
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  Smile plot    → {path.relative_to(ROOT)}")
 
 
-def plot_pillar_history(run_date: date = None) -> None:
+def plot_pillar_history(run_date: date = None, file_date=None) -> None:
     """
     Load every snapshot in SNAP_DIR, recompute pillars, and plot the
     IV time series for each delta pillar.
     """
     if run_date is None:
         run_date = TODAY
+    if file_date is None:
+        file_date = run_date
     files = sorted(SNAP_DIR.glob("*.parquet"))
     if not files:
         return
@@ -430,7 +434,7 @@ def plot_pillar_history(run_date: date = None) -> None:
     ax.grid(True, alpha=0.2)
 
     plt.tight_layout()
-    path = PLOT_DIR / f"pillar_history_{run_date}.png"
+    path = PLOT_DIR / f"pillar_history_{file_date}.png"
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  History plot  → {path.relative_to(ROOT)}")
@@ -593,9 +597,15 @@ def run_pipeline() -> None:
     print(f"  OTM strikes retained — calls: {n_calls}   puts: {n_puts}")
 
     # 5 ── Parquet snapshot ────────────────────────────────────────────────────
-    snap_path = SNAP_DIR / f"{TODAY}.parquet"
+    # Named by expiry date so files are identified by the options they describe.
+    snap_path = SNAP_DIR / f"{expiry}.parquet"
     df.to_parquet(snap_path, index=False)
     print(f"  Snapshot saved  → {snap_path.relative_to(ROOT)}")
+    # Write expiry for the CI email step to build correct links.
+    try:
+        Path("/tmp/expiry_date.txt").write_text(expiry)
+    except Exception:
+        pass
 
     # 6 ── Delta pillars ───────────────────────────────────────────────────────
     pillars = interpolate_pillars(df)
@@ -603,9 +613,10 @@ def run_pipeline() -> None:
     _print_pillars(pillars)
 
     # 7 ── Plots ───────────────────────────────────────────────────────────────
+    expiry_date = date.fromisoformat(expiry)
     print()
-    plot_smile(df, pillars, S, F, expiry, days, run_date=TODAY)
-    plot_pillar_history(run_date=TODAY)
+    plot_smile(df, pillars, S, F, expiry, days, run_date=TODAY, file_date=expiry_date)
+    plot_pillar_history(run_date=TODAY, file_date=expiry_date)
 
     print(f"\n  All done.  Outputs in: {DATA_DIR.relative_to(ROOT)}/\n")
 
