@@ -59,12 +59,13 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "Desktop/Files/Python Workspace/1DTE-SPX-OPTION/data/snapshots/"
-          git add "Desktop/Files/Python Workspace/1DTE-SPX-OPTION/data/plots/"
-          git add "Desktop/Files/Python Workspace/1DTE-SPX-OPTION/data/rates_cache.json"
+          git add -f "Desktop/Files/Python Workspace/1DTE-SPX-OPTION/data/snapshots/"
+          git add -f "Desktop/Files/Python Workspace/1DTE-SPX-OPTION/data/plots/"
+          git add -f "Desktop/Files/Python Workspace/1DTE-SPX-OPTION/data/rates_cache.json"
           git diff --cached --quiet \
             && echo "Nothing new to commit." \
             || git commit -m "chore: pipeline run $(date -u '+%Y-%m-%d')"
+          git pull --rebase origin main
           git push
 
       # ── 7. Build email body ───────────────────────────────────────────────────
