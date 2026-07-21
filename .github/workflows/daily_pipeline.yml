@@ -50,6 +50,8 @@ jobs:
       # ── 5. Run pipeline ───────────────────────────────────────────────────────
       - name: Run SPY 1DTE pipeline
         working-directory: "Desktop/Files/Python Workspace/1DTE-SPX-OPTION"
+        env:
+          TZ: America/New_York
         run: python3 spy_1dte_vol_pipeline.py | tee /tmp/pipeline_output.txt
 
       # ── 6. Commit results ─────────────────────────────────────────────────────
