@@ -2,11 +2,10 @@ name: SPY 1DTE IV Pipeline
 
 on:
   schedule:
-    # Dual schedule handles DST automatically:
-    #   4:00 pm EDT (Mar–Nov, UTC-4)  →  20:00 UTC
-    #   4:00 pm EST (Nov–Mar, UTC-5)  →  21:00 UTC
-    # The timing guard step below ensures only one of the two ever actually runs.
-    - cron: '0 20 * * 1-5'
+    # 21:00 UTC every weekday:
+    #   EDT (Mar–Nov, UTC-4)  →  5:00 pm ET  (1 hr after close — same-day data)
+    #   EST (Nov–Mar, UTC-5)  →  4:00 pm ET  (exactly at close)
+    # Single cron avoids DST-guard timing issues caused by GitHub queue delays.
     - cron: '0 21 * * 1-5'
   workflow_dispatch:   # manual trigger from the GitHub Actions UI
 
@@ -22,30 +21,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. DST guard ─────────────────────────────────────────────────────────
-      # The dual cron means one trigger fires at the wrong ET hour during the
-      # non-matching half of the year.  This step gates everything downstream:
-      # only proceed if it is actually 4 pm ET, or if triggered manually.
-      - name: Check ET time
+      # ── 2. Capture run date ───────────────────────────────────────────────────
+      - name: Set run date
         id: timing
         run: |
           python3 - <<'EOF'
           from datetime import datetime
           import zoneinfo, os
-          event    = os.environ.get("GITHUB_EVENT_NAME", "")
-          now_et   = datetime.now(zoneinfo.ZoneInfo("America/New_York"))
-          is_4pm   = now_et.hour == 16
-          is_manual = event == "workflow_dispatch"
-          should_run = is_4pm or is_manual
+          now_et = datetime.now(zoneinfo.ZoneInfo("America/New_York"))
           with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
-              fh.write(f"should_run={'true' if should_run else 'false'}\n")
               fh.write(f"run_date={now_et.strftime('%Y-%m-%d')}\n")
-          print(f"Event={event}  ET={now_et.strftime('%H:%M')}  should_run={should_run}")
+          print(f"ET={now_et.strftime('%H:%M')}  run_date={now_et.strftime('%Y-%m-%d')}")
           EOF
 
       # ── 3. Python setup ───────────────────────────────────────────────────────
       - name: Set up Python 3.11
-        if: steps.timing.outputs.should_run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -54,13 +44,11 @@ jobs:
 
       # ── 4. Dependencies ───────────────────────────────────────────────────────
       - name: Install dependencies
-        if: steps.timing.outputs.should_run == 'true'
         working-directory: "Desktop/Files/Python Workspace/1DTE-SPX-OPTION"
         run: pip install -r requirements.txt
 
       # ── 5. Run pipeline ───────────────────────────────────────────────────────
       - name: Run SPY 1DTE pipeline
-        if: steps.timing.outputs.should_run == 'true'
         working-directory: "Desktop/Files/Python Workspace/1DTE-SPX-OPTION"
         run: python3 spy_1dte_vol_pipeline.py | tee /tmp/pipeline_output.txt
 
@@ -68,7 +56,6 @@ jobs:
       # Snapshots, plots, and rates cache are committed back so history
       # accumulates in the repo across runs.
       - name: Commit snapshot, plots, and cache
-        if: steps.timing.outputs.should_run == 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -82,7 +69,6 @@ jobs:
 
       # ── 7. Build email body ───────────────────────────────────────────────────
       - name: Build email body
-        if: steps.timing.outputs.should_run == 'true'
         run: |
           python3 - <<'EOF'
           import re
@@ -134,7 +120,6 @@ jobs:
 
       # ── 8. Send email ─────────────────────────────────────────────────────────
       - name: Send completion email
-        if: steps.timing.outputs.should_run == 'true'
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
