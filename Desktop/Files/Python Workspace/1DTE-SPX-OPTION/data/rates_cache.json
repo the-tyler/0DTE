@@ -1,6 +1,6 @@
 {
-  "risk_free": 0.0393,
-  "risk_free_date": "2026-10-14",
-  "div_yield": 0.0073570693,
-  "div_yield_date": "2026-10-15"
+  "risk_free": 0.04,
+  "risk_free_date": "2026-10-15",
+  "div_yield": 0.0073361928,
+  "div_yield_date": "2026-10-16"
 }
